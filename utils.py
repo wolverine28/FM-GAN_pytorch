@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-def sample_from_generator(generator, embedding, batch_size, seq_len, h0, use_cuda=True):
+def sample_from_generator(generator, embedding, batch_size, seq_len, h0, use_cuda=True, use_mvnrom=True):
     res = []
 
     x = Variable(torch.tensor(2).repeat((batch_size, 1)).type(torch.LongTensor))
@@ -12,12 +12,16 @@ def sample_from_generator(generator, embedding, batch_size, seq_len, h0, use_cud
         x = x.cuda()
 
     h = h0
+    h = generator.latant_lin(h)
     c = generator.init_hidden(batch_size)
     samples = []
     for i in range(seq_len):
         emb = embedding(x)
         output, h, c = generator.step(emb, h, c,10)
-        x = output.argmax(1).view((-1,1))
+        if use_mvnrom:
+            x = output.multinomial(1)
+        else:
+            x = output.argmax(1).view((-1,1))
         samples.append(x)
 
     output = torch.cat(samples, dim=1)
@@ -30,12 +34,15 @@ def sample_from_generator_soft(generator, embedding, batch_size, seq_len, h0, us
         x = x.cuda()
 
     h = h0
+    h = generator.latant_lin(h)
     c = generator.init_hidden(batch_size)
+    emb = embedding(x)
+
     samples = []
     for i in range(seq_len):
-        emb = embedding(x)
         output, h, c = generator.step(emb, h, c,10)
         samples.append(output)
+        emb = embedding.forward_from_vocab_size(output).unsqueeze(1)
 
     output = torch.stack(samples, dim=1)
     return output
