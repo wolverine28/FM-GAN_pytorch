@@ -40,7 +40,7 @@ def sample_from_generator_soft(generator, embedding, batch_size, seq_len, h0, us
 
     samples = []
     for i in range(seq_len):
-        output, h, c = generator.step(emb, h, c,10)
+        output, h, c = generator.step(emb, h, c, 100)
         samples.append(output)
         emb = embedding.forward_from_vocab_size(output).unsqueeze(1)
 
@@ -67,7 +67,6 @@ def IPOT(x,y,n,beta=1,use_cuda=True):
         for k in range(1):
             delta = 1. / (n * torch.matmul(Q, sigma))
             sigma = 1. / (n * torch.matmul(Q.t(), delta))
-        # pdb.set_trace()
         tmp = torch.matmul(torch.diag(delta.squeeze()), Q)
         T = torch.matmul(tmp, torch.diag(sigma.squeeze()))
     return T, C

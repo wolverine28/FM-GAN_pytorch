@@ -28,19 +28,18 @@ from utils import sample_from_generator, IPOT, IPOT_distance, sample_from_genera
 
 # %%
 # ================== Parameter Definition =================
-BATCH_SIZE = 64
+BATCH_SIZE = 128
 SEQ_LEN = 50
 PRE_EPOCH_NUM = 50
 SEED = 88
 
-# vocab_size = 5000
 emb_dim = 100
 latant_dim = 128
 hidden_dim = 100
 use_cuda = True
 
-d_filter_sizes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20]
-d_num_filters = [100, 200, 200, 200, 200, 100, 100, 100, 100, 100, 160, 160]
+# d_filter_sizes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20]
+# d_num_filters = [100, 200, 200, 200, 200, 100, 100, 100, 100, 100, 160, 160]
 dropout = 0.5
 
 random.seed(SEED)
@@ -101,24 +100,24 @@ if use_cuda:
     generator = generator.cuda()
     extractor = extractor.cuda()
 # %%
-pretrained_embeddings = TEXT.vocab.vectors
-print(pretrained_embeddings.shape)
-embedding.emb.weight.data.copy_(pretrained_embeddings)
+# pretrained_embeddings = TEXT.vocab.vectors
+# print(pretrained_embeddings.shape)
+# embedding.emb.weight.data.copy_(pretrained_embeddings)
 
-unk_idx = TEXT.vocab.stoi[TEXT.unk_token]
-pad_idx = TEXT.vocab.stoi[TEXT.pad_token]
-init_idx = TEXT.vocab.stoi[TEXT.init_token]
-eos_idx = TEXT.vocab.stoi[TEXT.eos_token]
+# unk_idx = TEXT.vocab.stoi[TEXT.unk_token]
+# pad_idx = TEXT.vocab.stoi[TEXT.pad_token]
+# init_idx = TEXT.vocab.stoi[TEXT.init_token]
+# eos_idx = TEXT.vocab.stoi[TEXT.eos_token]
 
-embedding.emb.weight.data[unk_idx] = torch.zeros(emb_dim)
-embedding.emb.weight.data[pad_idx] = torch.zeros(emb_dim)
-embedding.emb.weight.data[init_idx] = torch.zeros(emb_dim)
-embedding.emb.weight.data[eos_idx] = torch.zeros(emb_dim)
+# embedding.emb.weight.data[unk_idx] = torch.zeros(emb_dim)
+# embedding.emb.weight.data[pad_idx] = torch.zeros(emb_dim)
+# embedding.emb.weight.data[init_idx] = torch.zeros(emb_dim)
+# embedding.emb.weight.data[eos_idx] = torch.zeros(emb_dim)
 
-print(embedding.emb.weight.data)
+# print(embedding.emb.weight.data)
 # %%
-embedding_optim = optim.Adam(embedding.parameters(),lr=0.01)
-generator_optim = optim.Adam(generator.parameters(),lr=0.01)
+# embedding_optim = optim.Adam(embedding.parameters(),lr=0.01)
+# generator_optim = optim.Adam(generator.parameters(),lr=0.01)
 # %%
 bs = 1
 z = torch.randn((1, bs, latant_dim)).cuda()
@@ -175,9 +174,10 @@ extractor_scheduler = optim.lr_scheduler.ExponentialLR(extractor_optim, 0.99)
 EPOCH = 200
 for epoch in range(EPOCH):
     # train extractor
-    losses = []
+    losses_disc = []
+    losses_gen = []
     for _ in range(1):
-        for batch in tqdm(train_loader):
+        for i, batch in enumerate(tqdm(train_loader)):
             text = Variable(batch.text)
             z = torch.randn((1, text.size(0), latant_dim))
             if use_cuda:
@@ -187,44 +187,30 @@ for epoch in range(EPOCH):
 
             fake_feat = extractor(embedding.forward_from_vocab_size(samples))
             real_feat = extractor(embedding(text[:,1:-1]))
-
             loss = IPOT_distance(fake_feat, real_feat)
-            loss = -loss
-            extractor_optim.zero_grad()
-            loss.backward()
-            extractor_optim.step()
-            losses.append(loss.item())
-        extractor_optim.step()
 
-        print('Epoch [%d], IPOT_distance Discriminator: %f' % (epoch, -np.mean(losses)))
+            if i % 2==0:
+                loss_disc = -loss
+                extractor_optim.zero_grad()
+                loss.backward()
+                extractor_optim.step()
+                losses_disc.append(loss_disc.item())
+            else:
+                loss_gen = loss
+                embedding_optim.zero_grad()
+                generator_optim.zero_grad()
+                loss.backward()
+                embedding_optim.step()
+                generator_optim.step()
+                losses_gen.append(loss_gen.item())
 
-    # train embedding and generator
-    losses = []
-    for batch in tqdm(train_loader):
-        text = Variable(batch.text)
-        z = torch.randn((1, text.size(0), latant_dim))
-        if use_cuda:
-            text = text.cuda()
-            z = z.cuda()
-        samples = sample_from_generator_soft(generator, embedding,text.size(0),SEQ_LEN,z)
+        extractor_scheduler.step()
+        embedding_scheduler.step()
+        generator_scheduler.step()
 
-        fake_feat = extractor(embedding.forward_from_vocab_size(samples))
-        real_feat = extractor(embedding(text[:,1:-1]))
+        print('Epoch [%d], IPOT_distance Discriminator: %f' % (epoch, -np.mean(losses_disc)))
+        print('Epoch [%d], IPOT_distance Generator: %f' % (epoch, np.mean(losses_gen)))
 
-        loss = IPOT_distance(fake_feat, real_feat)
-        loss = loss
-        embedding_optim.zero_grad()
-        generator_optim.zero_grad()
-        loss.backward()
-        embedding_optim.step()
-        generator_optim.step()
-        losses.append(loss.item())
-    embedding_scheduler.step()
-    generator_scheduler.step()
-
-    print('Epoch [%d], IPOT_distance Generator: %f' % (epoch, np.mean(losses)))
     z = torch.randn((1, 1, latant_dim)).cuda()
-    samples = sample_from_generator(generator, embedding,1,50,z,use_mvnrom=True)
+    samples = sample_from_generator(generator, embedding,1,50,z,use_mvnrom=False)
     print(' '.join([TEXT.vocab.itos[i] for i in samples[0]]))
-
-# %%

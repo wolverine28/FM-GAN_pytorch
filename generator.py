@@ -40,7 +40,7 @@ class Generator(nn.Module):
         """
         output, (h, c) = self.lstm(emb, (h, c))
         output = self.dropout(output.view(-1, self.hidden_dim))
-        pred = F.softmax(self.lin(output)/T, dim=1)
+        pred = F.softmax(self.lin(output)*T, dim=1)
         return pred, h, c
 
 

@@ -17,7 +17,7 @@ class Fextractor(nn.Module):
         self.RELU = nn.ReLU()
         self.conv1 = nn.Conv2d(1,300,[5,emb_dim],stride=[2,1])
         self.conv2 = nn.Conv2d(300,600,[5,1],stride=[2,1])
-        self.conv3 = nn.Conv2d(600,128,[10,1],stride=[2,1])
+        self.conv3 = nn.Conv2d(600,256,[5,1],stride=[2,1])
 
     def forward(self, emb):
         """
@@ -25,14 +25,14 @@ class Fextractor(nn.Module):
             x: (batch_size * seq_len)
         """
         emb = emb.unsqueeze(1)  # batch_size * 1 * seq_len * emb_dim
-        h1 = self.conv1(emb)
+        h1 = self.conv1(F.pad(emb,(0,0,4,4),'constant',0))
         h1 = self.RELU(h1)
         
         h2 = self.conv2(h1)
         h2 = self.RELU(h2)
 
         h3 = self.conv3(h2)
-        out = F.tanh(h3)
+        out = F.tanh(F.avg_pool2d(h3,(3,1)))
 
         return out.squeeze()
 
