@@ -5,10 +5,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class Fextractor(nn.Module):
-    """A CNN for text classification
-
-    architecture: Embedding >> Convolution >> Max-pooling >> Softmax
-    """
 
     def __init__(self,  emb_dim, dropout):
         super(Fextractor, self).__init__()
@@ -16,14 +12,10 @@ class Fextractor(nn.Module):
         self.init_parameters()
         self.RELU = nn.ReLU()
         self.conv1 = nn.Conv2d(1,300,[5,emb_dim],stride=[2,1])
-        self.conv2 = nn.Conv2d(300,600,[5,1],stride=[2,1])
-        self.conv3 = nn.Conv2d(600,256,[5,1],stride=[2,1])
+        self.conv2 = nn.Conv2d(300,600,[7,1],stride=[2,1])
+        self.conv3 = nn.Conv2d(600,256,[7,1],stride=[2,1])
 
     def forward(self, emb):
-        """
-        Args:
-            x: (batch_size * seq_len)
-        """
         emb = emb.unsqueeze(1)  # batch_size * 1 * seq_len * emb_dim
         h1 = self.conv1(F.pad(emb,(0,0,4,4),'constant',0))
         h1 = self.RELU(h1)
@@ -32,7 +24,8 @@ class Fextractor(nn.Module):
         h2 = self.RELU(h2)
 
         h3 = self.conv3(h2)
-        out = F.tanh(F.avg_pool2d(h3,(3,1)))
+        h3 = self.RELU(h3)
+        out = torch.tanh(h3.mean(dim=(-2, -1)))
 
         return out.squeeze()
 

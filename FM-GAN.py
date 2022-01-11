@@ -33,14 +33,17 @@ SEQ_LEN = 50
 PRE_EPOCH_NUM = 50
 SEED = 88
 
-emb_dim = 100
+emb_dim = 300
 latant_dim = 128
-hidden_dim = 100
+hidden_dim = 256
 use_cuda = True
 
 # d_filter_sizes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20]
 # d_num_filters = [100, 200, 200, 200, 200, 100, 100, 100, 100, 100, 160, 160]
 dropout = 0.5
+
+dis_steps = 3
+gen_steps = 1
 
 random.seed(SEED)
 np.random.seed(SEED)
@@ -176,40 +179,42 @@ for epoch in range(EPOCH):
     # train extractor
     losses_disc = []
     losses_gen = []
-    for _ in range(1):
-        for i, batch in enumerate(tqdm(train_loader)):
-            text = Variable(batch.text)
-            z = torch.randn((1, text.size(0), latant_dim))
-            if use_cuda:
-                text = text.cuda()
-                z = z.cuda()
-            samples = sample_from_generator_soft(generator, embedding,text.size(0),SEQ_LEN,z)
 
-            fake_feat = extractor(embedding.forward_from_vocab_size(samples))
-            real_feat = extractor(embedding(text[:,1:-1]))
-            loss = IPOT_distance(fake_feat, real_feat)
+    for i, batch in enumerate(tqdm(train_loader)):
+        text = Variable(batch.text)
+        z = torch.randn((1, text.size(0), latant_dim))
+        if use_cuda:
+            text = text.cuda()
+            z = z.cuda()
+        samples = sample_from_generator_soft(generator, embedding,text.size(0),SEQ_LEN,z)
 
-            if i % 2==0:
-                loss_disc = -loss
-                extractor_optim.zero_grad()
-                loss.backward()
-                extractor_optim.step()
-                losses_disc.append(loss_disc.item())
-            else:
-                loss_gen = loss
-                embedding_optim.zero_grad()
-                generator_optim.zero_grad()
-                loss.backward()
-                embedding_optim.step()
-                generator_optim.step()
-                losses_gen.append(loss_gen.item())
+        fake_feat = extractor(embedding.forward_from_vocab_size(samples))
+        real_feat = extractor(embedding(text[:,1:-1]))
+        loss = IPOT_distance(fake_feat, real_feat)
 
-        extractor_scheduler.step()
-        embedding_scheduler.step()
-        generator_scheduler.step()
+        if i % dis_steps==0:
+            loss_disc = -loss
+            extractor_optim.zero_grad()
+            loss.backward()
+            extractor_optim.step()
+            losses_disc.append(loss_disc.item())
+            continue
 
-        print('Epoch [%d], IPOT_distance Discriminator: %f' % (epoch, -np.mean(losses_disc)))
-        print('Epoch [%d], IPOT_distance Generator: %f' % (epoch, np.mean(losses_gen)))
+        if i % gen_steps==0:
+            loss_gen = loss
+            embedding_optim.zero_grad()
+            generator_optim.zero_grad()
+            loss.backward()
+            embedding_optim.step()
+            generator_optim.step()
+            losses_gen.append(loss_gen.item())
+
+    extractor_scheduler.step()
+    embedding_scheduler.step()
+    generator_scheduler.step()
+
+    print('Epoch [%d], IPOT_distance Discriminator: %f' % (epoch, -np.mean(losses_disc)))
+    print('Epoch [%d], IPOT_distance Generator: %f' % (epoch, np.mean(losses_gen)))
 
     z = torch.randn((1, 1, latant_dim)).cuda()
     samples = sample_from_generator(generator, embedding,1,50,z,use_mvnrom=False)

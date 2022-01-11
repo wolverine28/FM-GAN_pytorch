@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
+import numpy as np
 
 def sample_from_generator(generator, embedding, batch_size, seq_len, h0, use_cuda=True, use_mvnrom=True):
     res = []
@@ -76,36 +77,21 @@ def IPOT_distance(x, y,use_cuda=True):
     distance = (C*T).sum()
     return distance
 
-# def sample(generator, embedding, batch_size, seq_len, h0, x=None, use_cuda=True):
-#     res = []
-#     flag = False # whether sample from zero
-#     if x is None:
-#         flag = True
-#     if flag:
-#         x = Variable(torch.tensor(0).repeat((batch_size, 1)).type(torch.LongTensor))
-#         # x = Variable(torch.zeros((batch_size, 1)).long())
-#     if use_cuda:
-#         x = x.cuda()
-#     h = h0
-#     c = generator.init_hidden(batch_size)
-#     samples = []
-#     if flag:
-#         # samples.append(x)
-#         for i in range(seq_len):
-#             emb = embedding(x)
-#             output, h, c = generator.step(emb, h, c,10)
-#             x = output.argmax(1).view((-1,1))
-#             samples.append(x)
-#     else:
-#         given_len = x.size(1)
-#         lis = x.chunk(x.size(1), dim=1)
-#         for i in range(given_len):
-#             output, h, c = self.step(lis[i], h, c)
-#             samples.append(lis[i])
-#         x = output.multinomial(1)
-#         for i in range(given_len, seq_len):
-#             samples.append(x)
-#             output, h, c = self.step(x, h, c)
-#             x = output.multinomial(1)
-#     output = torch.cat(samples, dim=1)
-#     return output
+def get_minibatches_idx(n, minibatch_size, shuffle=False):
+    idx_list = np.arange(n, dtype="int32")
+
+    if shuffle:
+        np.random.shuffle(idx_list)
+
+    minibatches = []
+    minibatch_start = 0
+    for i in range(n // minibatch_size):
+        minibatches.append(idx_list[minibatch_start:
+                                    minibatch_start + minibatch_size])
+        minibatch_start += minibatch_size
+
+    # if (minibatch_start != n):
+    #     # Make a minibatch out of what is left
+    #     minibatches.append(idx_list[minibatch_start:])
+
+    return zip(range(len(minibatches)), minibatches), len(minibatches)
